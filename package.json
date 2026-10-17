@@ -1,0 +1,55 @@
+{
+  "name": "@local/dsh-bilibili",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "B站独立账号、消息与 Seeit 视频阅读桥接。",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./media": "./src/media.js",
+    "./monitor": "./src/monitor.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "src",
+    "locale",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AsakuraAOI/dsh-bilibili.git"
+  },
+  "homepage": "https://github.com/AsakuraAOI/dsh-bilibili#readme",
+  "bugs": {
+    "url": "https://github.com/AsakuraAOI/dsh-bilibili/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness"
+  ]
+}

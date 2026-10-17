@@ -1,0 +1,7 @@
+- insert:
+    - id: bilibili-account
+      name: '@local/dsh-bilibili'
+      config:
+        autoMonitor: true
+        checkIntervalSeconds: 600
+        maxVideosPerCheck: 3

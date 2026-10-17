@@ -1,0 +1,28 @@
+{
+  "sourceCommit": "25a556d876f520b11cd9b984d1445a7d5d8fd019",
+  "sourceDirectoryDigest": "7d53461cbdab98598bb6c3ce45d76113e0361be26300d1db441f61f70465bf05",
+  "version": "0.1.0",
+  "sourceHashes": {
+    "README.md": "4124e2f6af909ecf07825e0a406eda8b845c24fbb5a38ac7565700f068eb53c0",
+    "THIRD_PARTY_NOTICES.md": "c3d9b415f01fbd5eb6bb0b5219dc21a391332abeb0c93ccd25f09eb76f15ce1b",
+    "cordis.patch.yml": "dfaa8773efa76bbe68fc48b99a92d89bec98b6ad9256fc1b602500290c62f00b",
+    "locale/en.json": "0d4ffe3c23032a3b718bbad93baacf079a12ac08c9b18fd0de5c48f1b75c4b67",
+    "locale/zh.json": "0cdb9fa6af55f6ba4ddb89868e5a371eb77ead409e0a4fffcb9a3d81e48e1ce9",
+    "package-lock.json": "a241ab86dcacc0c1ec1799a31d7119ddb956b15b0d81a0c69b6eed87f7be8769",
+    "package.json": "4a5abbf3d256f0bfc1a89ee70d4b800b58df12d2acc151c76420fc17c93d05f5",
+    "src/client.js": "88e6a1942bed6fae7e5d5a3514be1f64987f6ede829fe1069f85aa7076be18f4",
+    "src/index.js": "44576a83b62cd7bc777dfc6ec65b43c7cfbd53429e4652303cc848c28a6b9334",
+    "src/media.js": "eda37a62f704b2c8c9ef08919d01bea6a08d14d66e9f8934a5c42117ad832581",
+    "src/monitor.js": "025014afd1e84314019c06e8a859d11f5bd39569e9ba57e52f113e2abf2d5dd3",
+    "tests/client.test.js": "d458c90b548a61fa2b97da6411c6c1f54913bb7c79212a0b27261b3bbc68d9ae",
+    "tests/monitor.test.js": "2e469da5a90eff16bc6344112adcffd8ac805ea4e3c4144919b8bbb603ddecd0",
+    "tests/plugin.test.js": "cfcd3914772597fcc4b6831ad7e5d9d112a07a0d86ff1397de899fe7a70756d6"
+  },
+  "transforms": [
+    "Kasumi public package/display naming",
+    "repository metadata and installation documentation",
+    "Bilibili dependency pinned to public version tag where applicable",
+    "personal paths anonymized in documentation/baselines"
+  ],
+  "compatibility": "Upstream protocol, credentials, provider and internal IDs retained"
+}
