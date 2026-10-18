@@ -3,5 +3,6 @@
       name: '@local/dsh-bilibili'
       config:
         autoMonitor: true
+        notifySession: false
         checkIntervalSeconds: 600
         maxVideosPerCheck: 3

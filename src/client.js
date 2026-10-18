@@ -1,9 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export const DEFAULT_ACCOUNT_FILE = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'storages', 'bilibili', 'account.json');
+export const COMMENT_MAX_CHARACTERS = 1000;
+// Conservative per-message caps; JSON escaping and UTF-8 bytes also count.
+export const PRIVATE_MAX_CHARACTERS = 500;
+export const PRIVATE_MAX_JSON_BYTES = 2000;
+export const PRIVATE_SEND_INTERVAL_MS = 1500;
+const privateOutboxes = new Map();
+const SEND_CLOCK = { now: () => Date.now(), sleep: (ms, signal) => delay(ms, undefined, { signal }) };
 const API = 'https://api.bilibili.com';
 const PASSPORT = 'https://passport.bilibili.com';
 const VC = 'https://api.vc.bilibili.com';
@@ -93,8 +101,9 @@ export async function boundedBody(response, limit) {
 }
 
 export class BilibiliClient {
-  constructor({ accountFile = DEFAULT_ACCOUNT_FILE, fetcher = fetch, signal, timeoutMs = 30000 } = {}) {
+  constructor({ accountFile = DEFAULT_ACCOUNT_FILE, fetcher = fetch, signal, timeoutMs = 30000, clock = SEND_CLOCK } = {}) {
     this.accountFile = accountFile; this.fetcher = fetcher; this.signal = signal; this.timeoutMs = timeoutMs;
+    this.clock = clock;
   }
   async account(requiredLogin = false) {
     const record = await readJson(this.accountFile, {});
@@ -241,8 +250,9 @@ export class BilibiliClient {
     })) };
   }
   async comment(input, content, root, parent) {
-    const text = required(content, 'content');
-    if ([...text].length > 1000) throw fail('MESSAGE_TOO_LONG', '评论最多 1000 字符。');
+    required(content, 'content');
+    const text = content;
+    if ([...text].length > COMMENT_MAX_CHARACTERS) throw fail('MESSAGE_TOO_LONG', '评论最多 1000 字符。');
     if (parent && !root) throw fail('INVALID_ARGUMENT', '回复评论必须同时指定 root 和 parent。');
     const video = await this.resolveVideo(input);
     const data = await this.request('/x/v2/reply/add', { form: { type: '1', oid: video.aid, plat: '1', message: text, ...(root ? { root: idString(root, 'root'), parent: idString(parent || root, 'parent') } : {}) } });
@@ -250,14 +260,35 @@ export class BilibiliClient {
     if (!data.rpid_str && !data.rpid) throw fail('WRITE_RESULT_UNKNOWN', '评论响应没有评论 ID，请在 B站核对结果后再操作。');
     return { sent: true, video: video.url, commentId: String(data.rpid_str || data.rpid), content: text };
   }
-  async sendMessage(uid, content) {
-    const receiver = idString(uid, 'uid'), account = await this.account(true), text = required(content, 'content');
+  async sendMessage(uid, content, { notBefore = 0 } = {}) {
+    required(content, 'content');
+    const receiver = idString(uid, 'uid'), text = content;
+    if ([...text].length > PRIVATE_MAX_CHARACTERS) throw fail('MESSAGE_TOO_LONG', '私信单段最多 500 字符。');
     const body = JSON.stringify({ content: text });
-    if (Buffer.byteLength(body) > 2000) throw fail('MESSAGE_TOO_LONG', '私信 JSON 内容最多 2000 字节。');
-    const sender = idString(account.cookies.DedeUserID, '账号 UID');
-    const params = await this.signed({ w_sender_uid: sender, w_receiver_id: receiver, w_dev_id: account.deviceId });
-    const data = await this.request('/web_im/v1/web_im/send_msg', { host: VC, params, form: { 'msg[sender_uid]': sender, 'msg[receiver_id]': receiver, 'msg[receiver_type]': '1', 'msg[msg_type]': '1', 'msg[msg_status]': '0', 'msg[dev_id]': account.deviceId, 'msg[timestamp]': String(Math.floor(Date.now() / 1000)), 'msg[new_face_version]': '1', 'msg[content]': body } });
-    if (!data.msg_key) throw fail('WRITE_RESULT_UNKNOWN', '私信响应没有消息 ID，请在 B站核对结果后再操作。');
-    return { sent: true, receiver, messageKey: String(data.msg_key), content: text };
+    if (Buffer.byteLength(body) > PRIVATE_MAX_JSON_BYTES) throw fail('MESSAGE_TOO_LONG', '私信 JSON 内容最多 2000 字节。');
+    const path = resolve(this.accountFile), key = process.platform === 'win32' ? path.toLowerCase() : path;
+    let outbox = privateOutboxes.get(key);
+    if (!outbox) { outbox = { tail: Promise.resolve(), nextAllowedAt: 0 }; privateOutboxes.set(key, outbox); }
+    // One queue across tool calls/client instances. Awaiting a POST alone is
+    // insufficient: B站 can order several messages accepted in one second oddly.
+    const task = outbox.tail.then(async () => {
+      this.signal?.throwIfAborted();
+      const deadline = Math.max(outbox.nextAllowedAt, Number.isFinite(notBefore) ? notBefore : 0);
+      while (deadline > this.clock.now()) await this.clock.sleep(deadline - this.clock.now(), this.signal);
+      this.signal?.throwIfAborted();
+      const account = await this.account(true), sender = idString(account.cookies.DedeUserID, '账号 UID');
+      const params = await this.signed({ w_sender_uid: sender, w_receiver_id: receiver, w_dev_id: account.deviceId });
+      const timestamp = Math.floor(this.clock.now() / 1000);
+      try {
+        const data = await this.request('/web_im/v1/web_im/send_msg', { host: VC, params, form: { 'msg[sender_uid]': sender, 'msg[receiver_id]': receiver, 'msg[receiver_type]': '1', 'msg[msg_type]': '1', 'msg[msg_status]': '0', 'msg[dev_id]': account.deviceId, 'msg[timestamp]': String(timestamp), 'msg[new_face_version]': '1', 'msg[content]': body } });
+        if (!data.msg_key) throw fail('WRITE_RESULT_UNKNOWN', '私信响应没有消息 ID，请在 B站核对结果后再操作。');
+        return { sent: true, receiver, messageKey: String(data.msg_key), content: text, timestamp, acknowledgedAt: this.clock.now() };
+      } finally {
+        // Wait after acknowledgement, rather than inventing future timestamps.
+        outbox.nextAllowedAt = this.clock.now() + PRIVATE_SEND_INTERVAL_MS;
+      }
+    });
+    outbox.tail = task.then(() => undefined, () => undefined);
+    return task;
   }
 }
