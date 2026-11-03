@@ -201,20 +201,20 @@ export class BilibiliClient {
     catch (error) { if (error.code === 'RISK_CONTROL') throw error; data = await this.request('/x/player/v2', { params }); }
     const tracks = data.subtitle?.subtitles || [];
     const track = tracks.find(s => /zh/.test(s.lan) && s.subtitle_url) || tracks.find(s => s.subtitle_url);
-    if (!track) return { transcript: undefined, note: data.need_login_subtitle ? '字幕需要登录；当前未读取字幕。' : '没有可用原字幕，尝试 Seeit ASR。' };
+    if (!track) return { transcript: undefined, note: data.need_login_subtitle ? '字幕需要登录；当前未读取字幕。' : '没有可用原字幕；由主 Agent 决定是否调用 ASR。' };
     const response = await this.mediaResponse(track.subtitle_url);
     const body = parseJson((await boundedBody(response, 8 * 1024 * 1024)).toString('utf8'));
     const cues = (body.body || []).map((c, i) => ({ id: `subtitle-${i}`, start: Number(c.from), end: Number(c.to), content: String(c.content || '') })).filter(c => c.content && Number.isFinite(c.start) && Number.isFinite(c.end) && c.start >= 0 && c.end >= c.start);
     return { transcript: cues.length ? { source: 'original', language: track.lan, cues } : undefined, note: cues.length ? '' : '字幕轨为空。' };
   }
-  async mediaResponse(address) {
+  async mediaResponse(address, requestSignal = this.signal) {
     let url = new URL(address.startsWith('//') ? `https:${address}` : address);
     for (let hops = 0; hops < 5; hops++) {
       if (url.protocol !== 'https:' || url.username || url.password || !isMediaHost(url.hostname)) throw fail('INVALID_MEDIA_HOST', '拒绝非 B站媒体域名。');
       // Login cookies must never accompany CDN or redirect requests.
-      const response = await this.fetcher(url.href, { headers: HEADERS, redirect: 'manual', signal: AbortSignal.any([AbortSignal.timeout(300000), ...(this.signal ? [this.signal] : [])]) });
+      const response = await this.fetcher(url.href, { headers: HEADERS, redirect: 'manual', signal: AbortSignal.any([AbortSignal.timeout(300000), ...(requestSignal ? [requestSignal] : [])]) });
       if ([301,302,303,307,308].includes(response.status)) { await response.body?.cancel(); url = new URL(response.headers.get('location'), url); continue; }
-      if (!response.ok) { await response.body?.cancel(); throw fail('MEDIA_HTTP_ERROR', `媒体下载 HTTP ${response.status}。`); }
+      if (!response.ok) { await response.body?.cancel(); throw Object.assign(fail('MEDIA_HTTP_ERROR', `媒体下载 HTTP ${response.status}。`), { status: response.status }); }
       return response;
     }
     throw fail('TOO_MANY_REDIRECTS', '媒体重定向次数过多。');

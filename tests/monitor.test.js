@@ -47,12 +47,25 @@ test('monitor follows pagination and preserves untouched page cursor', async t =
 test('schedule starts once with automatic reply and optional session notifications off', async () => {
   const records=[], schedule={list:async()=>records,create:async(sessionId,args)=>{const record={id:'task-1',title:args.title,everySeconds:args.every_seconds,prompt:args.prompt};records.push(record);return record;}};
   const first=await ensureMonitor(schedule,'session'); const second=await ensureMonitor(schedule,'session');
-  assert.equal(first.active,true); assert.equal(second.reused,true); assert.equal(records.length,1); assert.match(records[0].prompt,/默认回复原 @评论/); assert.match(records[0].prompt,/会话通知使用插件设置，默认关闭/); assert.equal(first.notifySession,false);
+  assert.equal(first.active,true); assert.equal(first.everySeconds,60); assert.equal(second.reused,true); assert.equal(records.length,1); assert.match(records[0].prompt,/默认回复原 @评论/); assert.match(records[0].prompt,/会话通知使用插件设置，默认关闭/); assert.equal(first.notifySession,false);
 });
 test('changing monitor interval updates the same persisted task through schedule API',async()=>{
  const existing={id:'task-1',title:'B站 @视频阅读',everySeconds:600};let request;
  const schedule={list:async()=>[existing],update:async value=>{request=value;return{record:{...existing,everySeconds:value.change.every_seconds}};}};
  const result=await ensureMonitor(schedule,'session',900);assert.equal(result.id,'task-1');assert.equal(result.everySeconds,900);assert.equal(request.change.every_seconds,900);
+});
+
+test('monitor accepts one minute but rejects faster, fractional or invalid intervals',async()=>{
+ const schedule={list:async()=>[],create:async(_sessionId,args)=>({id:'one-minute',...args})};
+ assert.equal((await ensureMonitor(schedule,'chat',60)).everySeconds,60);
+ for(const interval of [0,59,60.5,NaN]) await assert.rejects(()=>ensureMonitor(schedule,'chat',interval),{code:'INVALID_ARGUMENT'});
+});
+
+test('plugin reload updates existing intervals without replacing tasks or notification choices',async()=>{
+ const record={id:'existing',title:'B站 @视频阅读',everySeconds:300,prompt:MONITOR_PROMPT.replace('silentIfEmpty=true','silentIfEmpty=true,notifySession=true')},updates=[];
+ const schedule={catalog:async()=>[{...record,status:'active',sessionId:'chat'}],list:async()=>[record],update:async request=>{updates.push(request);record.prompt=request.prompt;record.everySeconds=request.change?.every_seconds??record.everySeconds;return{record};}};
+ assert.equal(await refreshMonitorPrompts(schedule,undefined,60),1);assert.equal(updates[0].id,'existing');assert.deepEqual(updates[0].change,{kind:'every',every_seconds:60});assert.match(record.prompt,/notifySession=true/);
+ assert.equal(await refreshMonitorPrompts(schedule,undefined,60),0);assert.equal(updates.length,1);
 });
 test('empty mentions and private inbox are quiet and conclude only silent checks',async t=>{
  const m=await fixture(t),result=await m.check(api([]),()=>assert.fail('nothing to read'));
@@ -130,12 +143,12 @@ test('a crash during sending requires manual verification rather than repeating 
 });
 
 test('notification selection updates one task and survives subsequent starts and prompt refresh',async()=>{
- const record={id:'task',title:'B站 @视频阅读',everySeconds:600,prompt:MONITOR_PROMPT},updates=[];
+ const record={id:'task',title:'B站 @视频阅读',everySeconds:60,prompt:MONITOR_PROMPT},updates=[];
  const schedule={list:async()=>[record],catalog:async()=>[{...record,status:'active',sessionId:'chat'}],update:async req=>{updates.push(req);record.prompt=req.prompt;return{record};}};
- assert.equal((await ensureMonitor(schedule,'chat',600,undefined,{notifySession:true})).notifySession,true);
+ assert.equal((await ensureMonitor(schedule,'chat',60,undefined,{notifySession:true})).notifySession,true);
  assert.equal((await ensureMonitor(schedule,'chat')).notifySession,true);assert.equal(updates.length,1);
  assert.equal(await refreshMonitorPrompts(schedule),0);assert.match(record.prompt,/notifySession=true/);
- assert.equal((await ensureMonitor(schedule,'chat',600,undefined,{notifySession:false})).notifySession,false);assert.match(record.prompt,/notifySession=false/);
+ assert.equal((await ensureMonitor(schedule,'chat',60,undefined,{notifySession:false})).notifySession,false);assert.match(record.prompt,/notifySession=false/);
 });
 
 test('multipart comments all reply to the original mention in order',async t=>{

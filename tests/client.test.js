@@ -9,7 +9,7 @@ const BV = 'BV1xx411c7mD';
 const metadata = { bvid: BV, aid: 170001, title: '演示', desc: '简介', owner: { name: '作者' }, duration: 120, pages: [{ page: 1, cid: 1, duration: 60, part: '上' }, { page: 2, cid: 2, duration: 60, part: '下' }] };
 const ok = data => Response.json({ code: 0, data });
 async function fixture(t, fetcher, options = {}) {
-  const dir = await mkdtemp(join(tmpdir(), 'dsh-bili-test-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-bili-test-')); t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 3 }));
   const accountFile = join(dir, 'account.json');
   await writeJson(accountFile, { cookies: { SESSDATA: 'secret-session', bili_jct: 'csrf-value', DedeUserID: '42' }, deviceId: 'test-device' });
   return new BilibiliClient({ accountFile, fetcher, ...options });

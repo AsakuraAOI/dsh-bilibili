@@ -1,4 +1,4 @@
-import { fail, idString, COMMENT_MAX_CHARACTERS, PRIVATE_MAX_CHARACTERS, PRIVATE_MAX_JSON_BYTES, PRIVATE_SEND_INTERVAL_MS } from './client.js';
+import { fail, idString, required, COMMENT_MAX_CHARACTERS, PRIVATE_MAX_CHARACTERS, PRIVATE_MAX_JSON_BYTES, PRIVATE_SEND_INTERVAL_MS } from './client.js';
 
 /** Include numbering in both limits and retain every original code point. */
 export function splitReply(content, channel) {
@@ -41,19 +41,27 @@ export function wantsPrivateReply(text = '') {
   });
 }
 
-export function prepareDelivery(item, reading) {
+export function replyDestination(item) {
   const channel = wantsPrivateReply(item.text) ? 'private' : 'comment';
   const target = channel === 'private'
     ? { uid: idString(item.uid, '提及者 UID') }
     : { video: item.video, parent: idString(item.parent, '原 @评论 ID'), root: idString(item.root && item.root !== '0' ? item.root : item.parent, '根评论 ID') };
+  return { channel, target };
+}
+
+export function prepareTextDelivery(item, content) {
+  required(content, 'content');
+  return { ...replyDestination(item), content, parts: splitReply(content, wantsPrivateReply(item.text) ? 'private' : 'comment').map(content => ({ content, status: 'pending' })) };
+}
+
+export function prepareDelivery(item, reading) {
   const raw = String(reading || '').trim();
   const overview = raw.match(/^overview:\s*\r?\n([\s\S]*)/m)?.[1]?.trim();
   if (!overview && /^(?:videoId|videoContentRead|status):/m.test(raw)) throw fail('REPLY_CONTENT_MISSING', '视频阅读缺少内容摘要，未发送。');
   const summary = (overview || raw).replace(/^sections \(\d+\):/gm, '关键时间点：').trim();
   if (!summary) throw fail('REPLY_CONTENT_MISSING', '视频阅读摘要为空，未发送。');
   const content = `视频阅读结果：\n${summary}`;
-  const parts = splitReply(content, channel).map(content => ({ content, status: 'pending' }));
-  return { channel, target, content, parts };
+  return prepareTextDelivery(item, content);
 }
 
 export async function sendDelivery(client, delivery, persist) {

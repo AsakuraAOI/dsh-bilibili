@@ -4,5 +4,5 @@
       config:
         autoMonitor: true
         notifySession: false
-        checkIntervalSeconds: 600
+        checkIntervalSeconds: 60
         maxVideosPerCheck: 3
