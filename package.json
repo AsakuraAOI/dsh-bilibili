@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-bilibili",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "B站独立账号、消息、视频下载和主 Agent 阅读协作。",
@@ -51,7 +51,7 @@
     "qrcode": "^1.5.4"
   },
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "3.18.4"
+    "@deepseek-ai/schemastery": "3.18.4 || 3.19.0"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "3.18.4"
